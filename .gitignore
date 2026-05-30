@@ -1,0 +1,25 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
+
+# Build / cache
+node_modules/
+dist/
+.cache/
+*.log
+
+# Eval workspaces (run locally, never committed)
+eval-workspaces/
+.pi-cache/
