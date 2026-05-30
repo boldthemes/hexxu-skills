@@ -1,9 +1,15 @@
 ---
 name: pi-docs-map
 description: Maps pi documentation topics to the right files and examples. Use when answering questions about pi itself, its CLI, SDK, extensions, themes, skills, prompt templates, TUI, providers, models, packages, sessions, settings, or when checking what documentation exists in the local pi source checkout.
-version: 0.1.0
+version: 0.2.0
 owner: 7247f12e-dfe7-4e49-96c4-aec989093938
 last_reviewed: 2026-05-30
+scope: Point the model at the right files in the local pi source checkout when the user asks how pi itself works — CLI, SDK, extensions, themes, providers, sessions, settings.
+non_goals:
+  - Documenting hexxu or hexxu-skills internals (not pi itself)
+  - Authoring or editing pi's own published documentation
+  - Answering questions about other agents (Claude Code, OpenCode, Aider)
+  - Implementing changes to pi (this skill only locates docs and references)
 ---
 
 # Pi Documentation Mapper

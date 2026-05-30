@@ -1,9 +1,15 @@
 ---
 name: add-llm-provider
 description: Checklist for adding a new LLM provider to packages/ai. Covers core types, provider implementation, lazy registration, model generation, the full test matrix, coding-agent wiring, and docs.
-version: 0.1.0
+version: 0.2.0
 owner: 7247f12e-dfe7-4e49-96c4-aec989093938
 last_reviewed: 2026-05-30
+scope: Authoring path for adding a brand-new LLM provider to packages/ai. Walks the full file set required for a working provider implementation.
+non_goals:
+  - Modifying an existing provider's defaults, model list, or auth scheme
+  - Changing pi's model-selection or runtime routing logic
+  - Adding a new transport (SSE, websocket) to an existing provider
+  - Edits in packages/coding-agent unrelated to provider wiring
 ---
 
 # Adding a New LLM Provider (packages/ai)

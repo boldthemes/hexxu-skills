@@ -1,10 +1,16 @@
 ---
 name: karpathy-guidelines
 description: Behavioral guidelines to reduce common LLM coding mistakes. Use when writing, reviewing, or refactoring code to avoid overcomplication, make surgical changes, surface assumptions, and define verifiable success criteria.
-version: 0.1.0
+version: 0.2.0
 owner: 7247f12e-dfe7-4e49-96c4-aec989093938
 last_reviewed: 2026-05-30
 license: MIT
+scope: Behavioral guardrails to apply while writing, reviewing, or refactoring code — surgical edits, surfaced assumptions, verifiable success criteria.
+non_goals:
+  - Language-specific style or formatting rules (lint configs, formatters)
+  - Project-specific architecture or design pattern decisions
+  - Replacing concrete code review feedback or test plans for a given diff
+  - Choosing between languages, frameworks, or runtimes
 ---
 
 # Karpathy Guidelines

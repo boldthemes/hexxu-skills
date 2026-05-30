@@ -1,9 +1,15 @@
 ---
 name: meeting-action-items
 description: Extracts action items, owners, due dates, decisions, blockers, dependencies, and open questions from messy meeting notes, call transcripts, and brainstorm bullets. Use when you need a clear post-meeting follow-up or tracker-ready task list from incomplete, informal, or out-of-order notes.
-version: 0.1.0
+version: 0.2.0
 owner: 7247f12e-dfe7-4e49-96c4-aec989093938
 last_reviewed: 2026-05-30
+scope: Distill action items, owners, due dates, decisions, blockers, dependencies, and open questions from informal meeting notes, call transcripts, and brainstorm bullets.
+non_goals:
+  - Summarizing email threads or chat logs
+  - Drafting agendas or pre-meeting briefs
+  - Composing recap or follow-up emails after the meeting
+  - Calendar scheduling or invite management
 ---
 
 # Meeting Action Items
