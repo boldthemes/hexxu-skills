@@ -1,0 +1,123 @@
+# identity-drift.yml — enforces CLAUDE.md constraint #2
+#
+# Skills MUST NOT read worker identity from ad-hoc sources (git config, whoami,
+# $USER, $LOGNAME). The single source is the HEXXU_WORKER_ID env var (constraint
+# #7). This workflow greps every changed file under skills/** on any PR to main
+# and fails if a forbidden pattern appears.
+#
+# Why this exists: constraint #2 is a habit, not a syntax error. Without a
+# mechanical check, identity assumptions sneak in slowly and become months of
+# cleanup work during a future SSO migration. The check is ~30 lines of YAML and
+# pays for itself the first time it catches one accidental commit.
+#
+# CEO-plan reference: D5.1 (identity drift CI check); Risk #3 mitigation;
+# constraint #2 in CLAUDE.md.
+
+name: identity-drift
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'skills/**'
+
+jobs:
+  check:
+    name: identity-drift check
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          # Need history so we can diff against the PR base
+          fetch-depth: 0
+
+      - name: Compute changed skill files
+        id: changed
+        run: |
+          set -euo pipefail
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          echo "Diffing $BASE_SHA..$HEAD_SHA under skills/**"
+
+          # Use null-delimited output and read into an array to handle any path
+          # safely (spaces, quotes, etc.). Then re-emit as a newline-delimited
+          # multiline GITHUB_OUTPUT block.
+          mapfile -d '' CHANGED < <(git diff -z --name-only --diff-filter=AM \
+            "$BASE_SHA" "$HEAD_SHA" -- 'skills/**' || true)
+
+          {
+            echo "files<<__EOF__"
+            for f in "${CHANGED[@]}"; do
+              [ -n "$f" ] && printf '%s\n' "$f"
+            done
+            echo "__EOF__"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Changed skill files (${#CHANGED[@]}):"
+          for f in "${CHANGED[@]}"; do
+            [ -n "$f" ] && echo "  $f"
+          done
+
+      - name: Scan changed files for forbidden identity sources
+        run: |
+          set -uo pipefail
+          FILES=$(cat <<'__FILES__'
+          ${{ steps.changed.outputs.files }}
+          __FILES__
+          )
+
+          if [ -z "$(printf '%s' "$FILES" | tr -d '[:space:]')" ]; then
+            echo "No skill files added or modified in this PR; skipping."
+            exit 0
+          fi
+
+          # Forbidden identity sources. Each is an ERE pattern.
+          # Add CLAUDE.md/docs/ to allowlist below if you need to mention them
+          # in documentation (currently we don't have any in skills/**).
+          declare -A FORBIDDEN=(
+            ['git config user\.']="Use HEXXU_WORKER_ID instead of git config (constraint #2)"
+            ['\bwhoami\b']="Use HEXXU_WORKER_ID instead of whoami (constraint #2)"
+            ['\$USER\b']="Use HEXXU_WORKER_ID instead of \$USER (constraint #2)"
+            ['\$LOGNAME\b']="Use HEXXU_WORKER_ID instead of \$LOGNAME (constraint #2)"
+            ['\$EUID\b']="Use HEXXU_WORKER_ID instead of \$EUID (constraint #2)"
+          )
+
+          FAILED=0
+          # Use process substitution + while-read so FAILED isn't lost to subshell
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            if [ ! -f "$file" ]; then
+              echo "::warning::Listed file not present in PR head: $file"
+              continue
+            fi
+            for pattern in "${!FORBIDDEN[@]}"; do
+              guidance="${FORBIDDEN[$pattern]}"
+              # Grep for line:content matches
+              if matches=$(grep -nE "$pattern" "$file" 2>/dev/null); then
+                while IFS= read -r line; do
+                  lineno="${line%%:*}"
+                  content="${line#*:}"
+                  # GitHub Actions annotation lands in PR diff view
+                  printf '::error file=%s,line=%s::Identity drift: %s\n' \
+                    "$file" "$lineno" "$guidance"
+                  printf '  %s:%s  %s\n' "$file" "$lineno" "$content"
+                done <<< "$matches"
+                FAILED=1
+              fi
+            done
+          done <<< "$FILES"
+
+          if [ "$FAILED" = "1" ]; then
+            echo ""
+            echo "=========================================================="
+            echo "identity-drift check FAILED"
+            echo "=========================================================="
+            echo "Skills MUST NOT read worker identity from ad-hoc sources."
+            echo "Use the HEXXU_WORKER_ID env var (constraint #7)."
+            echo "See CLAUDE.md constraint #2 for the full rationale."
+            exit 1
+          fi
+
+          echo "All changed skill files pass the identity-drift check."
