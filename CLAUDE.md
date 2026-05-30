@@ -43,10 +43,13 @@ Every skill's frontmatter MUST carry these fields:
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `name` | string | yes | matches the directory basename, lowercase + hyphens |
-| `description` | string ≤ 1024 chars | yes | drives pi's trigger detection |
+| `description` | string ≤ 1024 chars | yes | drives pi's trigger detection (routing-model facing) |
 | `version` | semver string | yes | constraint #1 |
 | `owner` | UUID | yes | matches a `HEXXU_WORKER_ID`; constraint #2/#7 |
 | `last_reviewed` | ISO date | yes | enables skill-rot detection |
+| `scope` | string 30–512 chars | yes | one-sentence positive statement; reviewer-facing anchor (T15) |
+| `non_goals` | array of 2–8 strings | yes | explicit anti-scope; routing-margin CI tests against these (T15) |
+| `supersedes` | array of skill names | no | when set, superseded skill dir MUST be deleted in same PR (T15) |
 | `requires` | array of `extension:<name>` / `data:<scope>` strings | no | foreshadows the dependency surface for pillars 2 & 3 |
 
 The full spec with examples lives in `docs/manifest-schema.md` (lands in T5).

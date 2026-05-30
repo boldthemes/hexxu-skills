@@ -1,0 +1,175 @@
+# routing-margin.yml — enforces skill scope discipline via SKILL.tests.md.
+#
+# Two stages:
+#   1. schema-validate every SKILL.tests.md touched in this PR. Always runs.
+#      No API key required. Catches malformed test files, missing fields,
+#      and `why` lines that don't cite a real non_goals entry.
+#   2. oracle (gated): for each touched skill, send positives/negatives through
+#      a model and assert routing margin. Only runs when ANTHROPIC_API_KEY is
+#      configured as a repo secret. Until then the scaffolding ships but the
+#      oracle is a no-op.
+#
+# Why this exists: self-improvement loops can drift skill scope between
+# iterations. The schema gate catches the test file going out of contract;
+# the oracle catches the description quietly stealing routes from neighbours.
+#
+# See docs/routing-tests.md for the full spec.
+
+name: routing-margin
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'skills/**'
+      - '.github/workflows/routing-margin.yml'
+      - '.github/scripts/validate-routing-tests.py'
+      - 'docs/routing-tests.md'
+
+jobs:
+  schema:
+    name: routing-test schema validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install pyyaml
+        run: pip install pyyaml
+
+      - name: Compute changed routing-test files
+        id: changed
+        run: |
+          set -euo pipefail
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+
+          # Same pattern as identity-drift.yml: null-delimited, --diff-filter=AMR
+          # so renames are scanned too. Restrict to SKILL.tests.md and to the
+          # full registry on workflow-self changes (so a workflow tweak
+          # re-validates everything).
+          if git diff --name-only --diff-filter=AMR "$BASE_SHA" "$HEAD_SHA" -- \
+              '.github/workflows/routing-margin.yml' \
+              '.github/scripts/validate-routing-tests.py' \
+              | grep -q .; then
+            echo "Workflow/validator changed — validating the full registry."
+            mapfile -d '' CHANGED < <(find skills -name 'SKILL.tests.md' -print0)
+          else
+            mapfile -d '' CHANGED < <(git diff -z --name-only --diff-filter=AMR \
+              "$BASE_SHA" "$HEAD_SHA" -- 'skills/*/SKILL.tests.md' || true)
+          fi
+
+          {
+            echo "files<<__EOF__"
+            for f in "${CHANGED[@]}"; do
+              [ -n "$f" ] && printf '%s\n' "$f"
+            done
+            echo "__EOF__"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Files to validate (${#CHANGED[@]}):"
+          for f in "${CHANGED[@]}"; do
+            [ -n "$f" ] && echo "  $f"
+          done
+
+      # Same env: pattern as identity-drift.yml — never inline ${{ }} into a
+      # bash heredoc. The step-output goes through env vars, not script text.
+      - name: Validate touched routing-test files
+        env:
+          FILES: ${{ steps.changed.outputs.files }}
+        run: |
+          set -uo pipefail
+
+          if [ -z "$(printf '%s' "$FILES" | tr -d '[:space:]')" ]; then
+            echo "No SKILL.tests.md files added or modified in this PR; skipping."
+            exit 0
+          fi
+
+          # Build argv array and exec the validator. Null-safe.
+          declare -a ARGS=()
+          while IFS= read -r line; do
+            [ -n "$line" ] && ARGS+=("$line")
+          done <<< "$FILES"
+
+          python3 .github/scripts/validate-routing-tests.py "${ARGS[@]}"
+
+      # Companion check: every changed SKILL.md must have a sibling SKILL.tests.md.
+      # Without this, an author could add a skill that "passes" routing-margin by
+      # having no tests to validate.
+      - name: Require SKILL.tests.md sibling for every changed SKILL.md
+        run: |
+          set -euo pipefail
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+
+          mapfile -d '' CHANGED_SKILLS < <(git diff -z --name-only --diff-filter=A \
+            "$BASE_SHA" "$HEAD_SHA" -- 'skills/*/SKILL.md' || true)
+
+          missing=0
+          for f in "${CHANGED_SKILLS[@]}"; do
+            [ -z "$f" ] && continue
+            tests_file="${f%/SKILL.md}/SKILL.tests.md"
+            if [ ! -f "$tests_file" ]; then
+              echo "::error file=$f::new skill missing required sibling SKILL.tests.md (expected at $tests_file)"
+              missing=1
+            fi
+          done
+
+          if [ "$missing" = "1" ]; then
+            echo "See docs/routing-tests.md for the spec."
+            exit 1
+          fi
+          echo "All new skills include a SKILL.tests.md sibling."
+
+  oracle:
+    name: routing-margin oracle (model gate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: schema
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+
+      - name: Probe for ANTHROPIC_API_KEY secret
+        id: probe
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::ANTHROPIC_API_KEY not configured — skipping routing-margin oracle."
+            echo "::notice::Schema validation passed. Configure the secret to enable the model gate."
+            echo "::notice::See docs/routing-tests.md 'What the CI gate does'."
+          fi
+
+      # The oracle script is not yet implemented. Until it lands, this step is
+      # a placeholder: it confirms wiring is in place and exits 0. When the
+      # script ships, replace this body with the actual invocation.
+      - name: Run routing oracle (placeholder)
+        if: steps.probe.outputs.configured == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          echo "::warning::Oracle script not yet implemented. See TODO in this workflow."
+          # TODO(t15-followup): implement .github/scripts/run-routing-oracle.py
+          #   - Read the registry of (name, description, scope) from skills/*/SKILL.md
+          #   - For each touched skill's SKILL.tests.md:
+          #       * For each positive_prompt: assert chosen == this skill,
+          #         and confidence(chosen) - confidence(runner_up) >= margin
+          #       * For each negative_prompt: assert chosen != this skill,
+          #         and chosen not in must_not_route_to
+          #   - 3 seeded runs; majority wins. Print per-test result table.
+          # When implemented, replace this echo with the python invocation and
+          # remove the `:` no-op.
+          :

@@ -1,9 +1,15 @@
 ---
 name: csv-to-markdown-converter
 description: Builds or improves CSV-to-Markdown converters, scripts, and CLIs. Use when the user wants to turn CSV data into markdown tables or markdown documents, or needs help with CSV parsing rules, markdown escaping, formatting options, and tests for that workflow.
-version: 0.1.0
+version: 0.2.0
 owner: 7247f12e-dfe7-4e49-96c4-aec989093938
 last_reviewed: 2026-05-30
+scope: Build or improve tools that convert CSV data into markdown tables or markdown documents, including parsing, escaping, formatting options, and tests.
+non_goals:
+  - Converting markdown back into CSV
+  - Converting CSV to JSON, HTML, or other non-markdown output formats
+  - Diagnosing arbitrary CSV parse errors outside a converter context
+  - General markdown editing unrelated to tables
 ---
 
 # CSV to Markdown Converter

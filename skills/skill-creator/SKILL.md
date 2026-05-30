@@ -1,9 +1,15 @@
 ---
 name: skill-creator
 description: Creates and improves pi skills. Use when designing a new skill, refining SKILL.md instructions, defining trigger descriptions, planning eval prompts, or iterating on a pi skill based on feedback. Not for iterating on prompt templates, generic LLM evals, GCP or cloud resource descriptions, or other LLM workflows that are not pi skills.
-version: 0.1.0
+version: 0.2.0
 owner: 7247f12e-dfe7-4e49-96c4-aec989093938
 last_reviewed: 2026-05-30
+scope: Author or revise pi skill files — SKILL.md content, trigger descriptions, eval prompts, and iteration on feedback from running skills.
+non_goals:
+  - Iterating on pi prompt templates under .pi/prompts/
+  - Generic LLM eval design unrelated to pi skills
+  - Authoring pi extensions or SDK scripts
+  - Authoring Claude Code skills (different format and host)
 ---
 
 # Skill Creator

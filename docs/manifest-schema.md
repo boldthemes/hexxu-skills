@@ -48,6 +48,11 @@ Semver version of the skill itself.
 |---|---|
 | Body text edits, doc improvements, no behavior change | patch (`0.1.0` → `0.1.1`) |
 | New optional behavior; old prompts still work | minor (`0.1.0` → `0.2.0`) |
+| `description` refined (wording, prompt-shaping) but stays inside `scope` and respects `non_goals` | minor |
+| `non_goals` entry added | minor |
+| `scope` text edited substantively | major |
+| `non_goals` entry removed or relaxed | major |
+| `supersedes` added (replacing a prior skill) | major; old skill dir MUST be deleted in the same PR |
 | Trigger description changes substantially OR breaking workflow change | major (`0.1.0` → `1.0.0`) |
 | Pre-1.0 development (initial bootstrap) | start at `0.1.0`; bump minor liberally |
 
@@ -67,6 +72,51 @@ The date this skill was last substantively reviewed.
 - **Format:** `YYYY-MM-DD` (ISO 8601 date, no time component)
 - **Bumped on every PR that touches this skill**, including ownership transfers and frontmatter-only changes.
 - Drives skill-rot detection in future tooling: skills with `last_reviewed` more than N days old surface for re-review.
+
+### `scope` (required, string)
+
+One-sentence positive statement of what this skill is for. The single line a
+human reviewer reads to judge "is this iteration still the same skill?"
+
+- **Min/max length:** 30–512 characters
+- **Should be a noun phrase or a single declarative sentence**, not a paragraph.
+- **Must be consistent with `description`** but is allowed to differ in phrasing.
+  `description` is prompt-shaped (drives routing); `scope` is reviewer-shaped
+  (drives "did we drift?" judgments).
+- Bumping `scope` text substantively = **major version bump**. It's a behavioral
+  promise to workers and to the routing layer.
+
+`scope` exists so self-improvement iterations can refine `description` for
+routing quality without it counting as a scope change, and so reviewers have a
+fixed reference point when judging an iteration PR.
+
+### `non_goals` (required, array of strings)
+
+Explicit anti-scope. The set of things this skill is NOT for.
+
+- **Item count:** 2–8 entries
+- **Item length:** 10–200 characters
+- **Each entry should be testable** — concrete enough that a routing prompt
+  could exercise it (see `docs/routing-tests.md`).
+- The 2-entry minimum exists to force authors past the obvious "not for X" and
+  enumerate the *adjacent neighbours* — the skills nearby in concept space that
+  could plausibly steal routing.
+
+`non_goals` is the contract that self-improvement iterations are checked
+against. Adding an entry is a **minor bump**; removing or relaxing one is a
+**major bump** (you are widening the skill's scope).
+
+### `supersedes` (optional, array of strings)
+
+Names of skills this one replaces.
+
+- **Pattern per entry:** same as `name` (`^[a-z0-9]+(-[a-z0-9]+)*$`)
+- **CI rule:** if skill B has `supersedes: [a]` then skill A's directory MUST
+  be deleted in the same PR. Prevents zombie skills that never fire but pollute
+  the routing space.
+- Use when iterating produces a sufficiently different skill that keeping the
+  old one would create a routing collision. Most version bumps are NOT a
+  supersession — only a rewrite that warrants a new `name`.
 
 ### `requires` (optional, array of strings)
 
@@ -90,6 +140,12 @@ description: Extracts action items with owners from meeting transcripts. Use whe
 version: 0.3.0
 owner: 8f3e9d2c-1b4a-4f7e-9c8d-2a1b3c4d5e6f
 last_reviewed: 2026-05-30
+scope: Distill action items, owners, due dates, decisions, blockers, dependencies, and open questions from informal meeting and call notes.
+non_goals:
+  - Summarizing email threads or chat logs
+  - Drafting agendas or pre-meeting briefs
+  - Composing recap or follow-up emails
+  - Calendar scheduling or invite management
 requires:
   - extension:hexxu-telemetry
 ---
@@ -108,6 +164,12 @@ description: Converts CSV input into a markdown table. Use when the user pastes 
 version: 0.1.0
 owner: 8f3e9d2c-1b4a-4f7e-9c8d-2a1b3c4d5e6f
 last_reviewed: 2026-05-30
+scope: Build or improve tools that convert CSV data into markdown tables and documents.
+non_goals:
+  - Converting markdown back into CSV
+  - Converting CSV to JSON, HTML, or other non-markdown formats
+  - Diagnosing arbitrary CSV parse errors outside a converter context
+  - General markdown editing unrelated to tables
 ---
 
 # CSV to Markdown Converter
@@ -155,7 +217,7 @@ when the deferred `manifest-schema` CI lands.
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "hexxu skill manifest",
   "type": "object",
-  "required": ["name", "description", "version", "owner", "last_reviewed"],
+  "required": ["name", "description", "version", "owner", "last_reviewed", "scope", "non_goals"],
   "properties": {
     "name": {
       "type": "string",
@@ -180,6 +242,23 @@ when the deferred `manifest-schema` CI lands.
       "format": "date",
       "pattern": "^\\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\\d|3[01])$"
     },
+    "scope": {
+      "type": "string",
+      "minLength": 30,
+      "maxLength": 512
+    },
+    "non_goals": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 10, "maxLength": 200 },
+      "minItems": 2,
+      "maxItems": 8,
+      "uniqueItems": true
+    },
+    "supersedes": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+      "uniqueItems": true
+    },
     "requires": {
       "type": "array",
       "items": {
@@ -203,6 +282,11 @@ when the deferred `manifest-schema` CI lands.
 - **Adding `tools:`, `permissions:`, `mcp:`** — Claude Code idioms; pi ignores. Don't pollute.
 - **Omitting `requires` when the skill talks to telemetry / postgres / files** — declarations make the data layer explicit; future tooling validates against them. Better to declare and be wrong than to silently couple.
 - **`name` ≠ directory basename** — workers won't find the skill. CI doesn't catch this today; T11's TODOS includes a revival trigger to add directory-name validation when the broader schema CI lands.
+- **`scope` that just paraphrases `description`** — the two fields exist to serve different consumers (`description` → routing model, `scope` → human reviewer). If they read identically, you have not actually committed to a scope. Re-write `scope` as a fixed reference point.
+- **`non_goals` that are operational notes, not routing-distinguishable** — entries like "do not run if disk is full" belong in the body. `non_goals` must be things a routing test could exercise: an adjacent prompt that *looks* like a fit but isn't.
+- **`non_goals` shorter than 2 entries** — schema rejects this; the floor is there to force enumeration of *adjacent neighbours*, not just the obvious "not for X".
+- **Iterating `description` past the `scope` line without bumping major** — the routing-margin CI gate (lands with this spec) catches the routing drift; the version field tells the human reviewer about the semantic drift. Both are required.
+- **Adding `supersedes` without deleting the superseded skill's directory** — zombie skills pollute the routing space and lie to workers about what's available. CI rejects this.
 
 ---
 
