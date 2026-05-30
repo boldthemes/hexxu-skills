@@ -60,19 +60,30 @@ text file. Recovering it later is hard once your shell profile is gone, and
 losing it means your historical telemetry can't be re-attributed to you
 (the rotation policy below makes the old UUID a former worker, period).
 
-## Step 2 — Install the `hexxu-skills-sync` pi extension
+## Step 2 — Clone the hexxu platform repo
+
+The pi extensions, the CLI, and the prompt templates live in
+[boldthemes/hexxu](https://github.com/boldthemes/hexxu) (the platform
+repo; paired with this repo which holds skill content). Clone it
+somewhere stable on your machine:
+
+```bash
+git clone git@github.com:boldthemes/hexxu.git ~/Development/hexxu
+# Or clone via HTTPS if you don't have SSH access set up:
+# git clone https://github.com/boldthemes/hexxu.git ~/Development/hexxu
+```
+
+You'll reference this clone in Steps 3-5. The path is yours to choose;
+`~/Development/hexxu` is the convention.
+
+## Step 3 — Install the `hexxu-skills-sync` pi extension
 
 The sync extension pulls this repo into `~/.pi/agent/skills/central/` on
 every pi session start.
 
-The extension currently lives in the **hexxu** workspace tree (not in this
-repo and not on a public registry yet — publication is a deferred TODO).
-Get the extension files from the workspace owner (tarball, shared
-filesystem, copy command — whatever's available) and install:
-
 ```bash
 mkdir -p ~/.pi/agent/extensions
-cp -r path/to/hexxu/.pi/extensions/hexxu-skills-sync \
+cp -r ~/Development/hexxu/.pi/extensions/hexxu-skills-sync \
   ~/.pi/agent/extensions/hexxu-skills-sync
 ```
 
@@ -99,13 +110,13 @@ Pi auto-discovers extensions in `~/.pi/agent/extensions/`. No registration step.
 See `~/.pi/agent/extensions/hexxu-skills-sync/README.md` for the full
 behavior matrix.
 
-## Step 3 — Install the `hexxu-telemetry` pi extension
+## Step 4 — Install the `hexxu-telemetry` pi extension
 
 The telemetry extension captures one JSONL record per pi session at
 `session_shutdown`. Local-only. Same install pattern:
 
 ```bash
-cp -r path/to/hexxu/.pi/extensions/hexxu-telemetry \
+cp -r ~/Development/hexxu/.pi/extensions/hexxu-telemetry \
   ~/.pi/agent/extensions/hexxu-telemetry
 ```
 
@@ -115,15 +126,15 @@ session and skips writing — set the env var first.
 See `~/.pi/agent/extensions/hexxu-telemetry/README.md` for the locked
 schema and rotation policy.
 
-## Step 4 — Install the `hexxu-telemetry-summary` CLI
+## Step 5 — Install the `hexxu-telemetry-summary` CLI
 
 The CLI reads `~/.hexxu/telemetry/telemetry.jsonl` and prints a rollup. Recommended for daily-driver use; without it you have telemetry data but no view into it.
 
 ```bash
 mkdir -p ~/.hexxu/bin
-ln -sfn path/to/hexxu/cli/telemetry-summary.ts \
+ln -sfn ~/Development/hexxu/cli/telemetry-summary.ts \
   ~/.hexxu/bin/hexxu-telemetry-summary
-chmod +x path/to/hexxu/cli/telemetry-summary.ts   # if not already
+chmod +x ~/Development/hexxu/cli/telemetry-summary.ts   # if not already
 
 # Add ~/.hexxu/bin to PATH (one-time)
 echo 'export PATH="$HOME/.hexxu/bin:$PATH"' >> ~/.bashrc
@@ -137,9 +148,9 @@ hexxu-telemetry-summary -h
 # Expect: usage banner
 ```
 
-See `path/to/hexxu/cli/README.md` for full CLI docs.
+See `~/Development/hexxu/cli/README.md` for full CLI docs (or browse it on GitHub: [boldthemes/hexxu/cli/README.md](https://github.com/boldthemes/hexxu/blob/main/cli/README.md)).
 
-## Step 5 — First-session verification
+## Step 6 — First-session verification
 
 Start a pi session in any directory, ask it a trivial question, exit:
 
@@ -241,8 +252,9 @@ in-scope. Until then, this manual flow is the canonical path.
 
 ## What you do NOT need on a worker machine
 
-- The hexxu project tree (you only need the three extension dirs + the CLI file)
 - npm/yarn/pnpm (no build step; everything runs via `node
   --experimental-strip-types`)
 - A package.json (each pi extension is self-contained)
-- A GitHub token for read access (the central repo is public)
+- A GitHub token for read access (both `hexxu-skills` and `hexxu` are public)
+- The full pi source tree (`pisource/` is gitignored in `boldthemes/hexxu`; clone it separately if you want it as a reference)
+- The full hexxu-skills repo (the sync extension fetches it on its own — you can clone it for local browsing but the worker doesn't need a manual clone)
