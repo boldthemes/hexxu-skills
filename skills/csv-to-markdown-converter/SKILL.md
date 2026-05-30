@@ -117,3 +117,5 @@ This skill should usually not trigger for:
 - markdown editing unrelated to CSV data
 - broad ETL or data-cleaning tasks that only happen to mention CSV
 - conversions to HTML, JSON, or spreadsheet formats unless markdown output is central
+
+<!-- E2E test marker: whoami should fail this CI -->
