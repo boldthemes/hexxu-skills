@@ -19,7 +19,10 @@ on:
   pull_request:
     branches: [main]
     paths:
+      # T13.11: also fire on changes to the workflow itself so a PR that
+      # weakens the regex set triggers the meta-check job below.
       - 'skills/**'
+      - '.github/workflows/identity-drift.yml'
 
 jobs:
   check:
@@ -44,7 +47,10 @@ jobs:
           # Use null-delimited output and read into an array to handle any path
           # safely (spaces, quotes, etc.). Then re-emit as a newline-delimited
           # multiline GITHUB_OUTPUT block.
-          mapfile -d '' CHANGED < <(git diff -z --name-only --diff-filter=AM \
+          # T13.16: --diff-filter=AMR catches renames too. A rename without
+          # modification to a file that already contained a forbidden pattern
+          # otherwise slips through.
+          mapfile -d '' CHANGED < <(git diff -z --name-only --diff-filter=AMR \
             "$BASE_SHA" "$HEAD_SHA" -- 'skills/**' || true)
 
           {
@@ -60,13 +66,16 @@ jobs:
             [ -n "$f" ] && echo "  $f"
           done
 
+      # T13.3: pass the step output via env: instead of inline ${{ }} templating
+      # into a bash heredoc. The heredoc approach pasted the file list as
+      # literal script text; a malicious filename containing the heredoc
+      # terminator would have prematurely closed it. env: keeps the data
+      # path through env vars, not through script-text interpolation.
       - name: Scan changed files for forbidden identity sources
+        env:
+          FILES: ${{ steps.changed.outputs.files }}
         run: |
           set -uo pipefail
-          FILES=$(cat <<'__FILES__'
-          ${{ steps.changed.outputs.files }}
-          __FILES__
-          )
 
           if [ -z "$(printf '%s' "$FILES" | tr -d '[:space:]')" ]; then
             echo "No skill files added or modified in this PR; skipping."
@@ -94,8 +103,10 @@ jobs:
             fi
             for pattern in "${!FORBIDDEN[@]}"; do
               guidance="${FORBIDDEN[$pattern]}"
-              # Grep for line:content matches
-              if matches=$(grep -nE "$pattern" "$file" 2>/dev/null); then
+              # T13.15: grep -iE so case variants (`$User`, `Whoami`, etc.) get caught too.
+              # Skills are unlikely to have a legitimate `$User` reference, but if one shows
+              # up, an inline exception is easier than missing the violation entirely.
+              if matches=$(grep -niE "$pattern" "$file" 2>/dev/null); then
                 while IFS= read -r line; do
                   lineno="${line%%:*}"
                   content="${line#*:}"
@@ -121,3 +132,34 @@ jobs:
           fi
 
           echo "All changed skill files pass the identity-drift check."
+
+  # T13.11: meta-check. Always runs alongside the main check. On PRs that
+  # only modify skill files, it's a quick no-op confirming the workflow
+  # itself is still valid. On PRs that modify the workflow, it verifies
+  # the essential FORBIDDEN patterns are still present so a weakening
+  # change (intentional or accidental) is caught at the CI gate.
+  meta-check:
+    name: identity-drift meta-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+
+      - name: Verify essential patterns still present
+        run: |
+          set -e
+          file=.github/workflows/identity-drift.yml
+          missing=()
+          for pattern in 'whoami' 'git config user' '\$USER' '\$LOGNAME' '\$EUID'; do
+            if ! grep -qF "$pattern" "$file"; then
+              missing+=("$pattern")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::identity-drift workflow is missing essential patterns: ${missing[*]}"
+            echo "These patterns must remain in the FORBIDDEN map. Removing them silently"
+            echo "weakens constraint #2 enforcement."
+            exit 1
+          fi
+          echo "All essential identity-drift patterns are still present."
