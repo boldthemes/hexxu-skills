@@ -36,4 +36,3 @@ The original CEO plan is at `/home/macak/Development/hexxu/docs/designs/central-
 
 Bootstrapping. Tasks T1-T11 from the CEO plan. This commit is T1 (repo + branch protection).
 
-<!-- T1 verification: this comment exists only to test direct-push rejection -->
