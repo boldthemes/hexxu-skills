@@ -166,29 +166,6 @@ the workflow's actual document source.
 
 **Refs:** CEO plan trajectory phase B.
 
-### 9. hexxu extension distribution mechanism
-
-**What:** Today, the `hexxu-skills-sync` and `hexxu-telemetry` extensions
-live in the unpublished hexxu workspace tree. Worker onboarding requires
-"copy from /path/to/hexxu/.pi/extensions/...". A distribution mechanism
-would publish them properly. Options:
-
-- npm packages (`@boldthemes/hexxu-skills-sync` etc.) → workers `pi
-  install` per the upstream pi convention
-- A `hexxu-extensions` git repo that mirrors the extensions, similar to
-  `hexxu-skills` for skills
-- Bundle into the `hexxu` onboarding CLI (TODO #4) which installs from a
-  versioned tarball
-
-**Revival trigger:** Worker #2 is about to onboard (same as TODO #4 —
-they collapse into one revival).
-
-**Why deferred:** Until worker #2 exists, manual copy is acceptable
-operational debt. Choosing among the three options requires actual install
-pain to guide the decision.
-
-**Effort:** depends on chosen path; ~M to ~L (a few hours to a couple days).
-
 ## Done (kept for the revival audit trail)
 
 Items the CEO plan considered and then explicitly accepted/scoped instead
@@ -202,6 +179,7 @@ to "revive" them.
 - ✅ Identity-drift CI workflow — shipped T3
 - ✅ `docs/` directory + architecture/onboarding/extension-authoring/manifest-schema docs — shipped T2/T5/T9
 - ✅ `CONTRIBUTORS.md` (with eval-gate revival trigger) — shipped T2
+- ✅ **hexxu extension distribution mechanism** — shipped T12 as the published `boldthemes/hexxu` repo. Workers clone hexxu and copy `.pi/extensions/hexxu-skills-sync`, `.pi/extensions/hexxu-telemetry`, and `cli/telemetry-summary.ts` per `docs/onboarding.md`. Closes what was originally drafted as TODO #9 (deferred); resolved without deferral after the post-T11 audit uncovered the full scope of undistributed code (skill-creator extension + SDK + Claude Code skills + prompts + workflows + e2e harness).
 
 ## Add a TODO
 
