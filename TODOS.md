@@ -76,6 +76,20 @@ steps into one command: generate UUID, install extensions to
 `~/.hexxu/bin/`, write the export lines to the shell profile, verify with
 a smoke session.
 
+**Windows: must detect the shell and branch the bootstrap.** Since all
+workers run Windows (T16), the CLI has to handle both supported shells the
+onboarding doc now documents, mirroring pi's own shell discovery
+(`shellPath` in `~/.pi/agent/settings.json` → Git Bash → `bash.exe` on
+PATH):
+- **Git Bash (default):** `uuidgen` is absent — use the `openssl`-based v4
+  generator (or Node `crypto.randomUUID()`); write the export to Git Bash's
+  `~/.bashrc` and warn that pi must be launched from Git Bash to see
+  `HEXXU_WORKER_ID`; install the CLI as the `node`-invoking wrapper, not a
+  symlink. The extensions already self-detect `win32` (junction mount,
+  `%USERPROFILE%`-ACL telemetry) so no install-time flag is needed.
+- **WSL:** the POSIX path works as-is; verify the clone is under `~`
+  (ext4), not `/mnt/c/`, and warn if it isn't.
+
 Distribution path: publish as an npm package, OR ship from a published
 hexxu-extensions repo (see TODO #9). Until either exists, install is by
 filesystem copy per `docs/onboarding.md`.
