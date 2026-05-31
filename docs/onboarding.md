@@ -11,14 +11,81 @@ After the steps below:
 
 - **Skills auto-sync** from this repo into `~/.pi/agent/skills/central/` on
   every pi `session_start`, non-blocking, with a 5-minute staleness cache
-- **Telemetry** lands at `~/.hexxu/telemetry/telemetry.jsonl` (mode 0600,
-  local-only, append-only, rotates at 50 MB or 90 days)
+- **Telemetry** lands at `~/.hexxu/telemetry/telemetry.jsonl` (mode 0600 on
+  POSIX/WSL; on Git Bash the mode is a no-op and privacy rides on your
+  `%USERPROFILE%` ACL — see the Windows section), local-only, append-only,
+  rotates at 50 MB or 90 days
 - **CLI** `hexxu-telemetry-summary` available on `PATH` to roll up the
   telemetry by skill / exit reason / duration percentile
 - **Identity** scoped via `HEXXU_WORKER_ID`, an env var carrying the
   worker's UUID v4 across all hexxu tooling
 
+## Platform: Windows workers
+
+> **Skip this section if your machine is Linux or macOS** — go straight to
+> Prerequisites.
+
+Pi itself [requires a bash shell on
+Windows](https://github.com/earendil-works/pi-coding-agent) and finds one
+in this order: a custom `shellPath` in `~/.pi/agent/settings.json`, then
+**Git Bash** (`C:\Program Files\Git\bin\bash.exe`), then any `bash.exe` on
+`PATH` (Cygwin / MSYS2 / WSL). The hexxu worker stack also leans on a POSIX
+environment — a bash, real symlinks (the central-skills mount), and Unix
+file modes (`0600` on the telemetry log). You have two supported ways to
+provide that, and you run every command in this doc inside whichever bash
+you pick:
+
+### Option 1 — Git Bash (recommended; matches pi's default)
+
+Install [Git for Windows](https://git-scm.com/download/win) — that's it for
+the shell. Pi auto-discovers Git Bash, so there's nothing to configure
+(point pi at it explicitly with a `shellPath` setting only if you installed
+Git somewhere non-standard). Then install **Node 24+** for Windows and pi
+per the Prerequisites below, and run all steps from the **Git Bash** prompt.
+
+The two extensions handle Windows transparently:
+
+- The skills mount uses a **directory junction** instead of a symlink, so it
+  needs no Admin / Developer Mode.
+- The telemetry log's `0600` mode is a no-op on NTFS; its privacy instead
+  rides on your per-user `%USERPROFILE%` ACL (the file lives under
+  `~/.hexxu`, inside your profile). This is fine for a single-user desktop —
+  see the note in Step 4. If you need a hard owner-only guarantee, use WSL.
+
+> **One env-var caveat:** `HEXXU_WORKER_ID` (Step 1) goes in Git Bash's
+> `~/.bashrc`, so it's only visible to processes launched **from Git Bash**.
+> Start pi from the Git Bash prompt, not a desktop shortcut or PowerShell,
+> or the telemetry extension won't see your worker ID.
+
+### Option 2 — WSL (optional; full POSIX guarantees)
+
+Run the entire stack inside WSL (Windows Subsystem for Linux) for a real
+Linux environment — real symlinks and a real owner-only `0600` telemetry
+mode. Choose this if the profile-ACL story above isn't enough for you.
+
+1. **Install WSL with Ubuntu** (elevated PowerShell): `wsl --install -d Ubuntu`,
+   reboot if prompted, launch **Ubuntu**, create your Linux user.
+2. **Install git + Node 24+ inside Ubuntu:**
+
+   ```bash
+   sudo apt update && sudo apt install -y git
+   curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
+   sudo apt install -y nodejs
+   ```
+3. **Install pi inside WSL** per the Prerequisites below.
+
+> **Keep everything in the WSL filesystem, not `/mnt/c/`.** Clone under your
+> Linux home (`~/Development/...`), never a Windows drive at `/mnt/c/...` —
+> on `/mnt/c` symlinks need elevation and Unix modes are ignored, which
+> defeats the whole point of using WSL. Inside `~` (ext4) both work.
+
+From here on, run every command inside your chosen bash, and `~` means that
+shell's home.
+
 ## Prerequisites
+
+> **Windows workers:** pick a shell in the section above first (Git Bash or
+> WSL), then run all of the following from that bash.
 
 - **Pi installed** — see [@earendil-works/pi-coding-agent install
   docs](https://github.com/earendil-works/pi-coding-agent). Recommended pi
@@ -27,7 +94,10 @@ After the steps below:
   (`https://github.com/boldthemes/hexxu-skills.git`). No auth needed for
   sync.
 - **Node 24+** — required for `--experimental-strip-types` (the CLI runs as
-  TS directly, no build step).
+  TS directly, no build step). On Git Bash this is Node for Windows; on WSL
+  it's the Linux Node installed above.
+- **git** — for cloning the platform repo (Step 2). Bundled with Git for
+  Windows (Option 1) or installed inside WSL (Option 2).
 
 ## Step 1 — Generate and export `HEXXU_WORKER_ID`
 
@@ -35,9 +105,11 @@ Every worker has a stable UUID v4 that travels with them across machines.
 Constraint #7 (see [CLAUDE.md](../CLAUDE.md)).
 
 ```bash
-# Generate a fresh UUID v4
-WORKER_ID=$(uuidgen | tr 'A-Z' 'a-z')
-# Or: WORKER_ID=$(python3 -c "import uuid; print(uuid.uuid4())")
+# Generate a fresh UUID v4 (pick the line that works in your shell)
+WORKER_ID=$(uuidgen | tr 'A-Z' 'a-z')                        # POSIX / WSL
+# Git Bash (no uuidgen bundled; openssl is) — synthesize a v4:
+# WORKER_ID=$(openssl rand -hex 16 | sed -E 's/^(.{8})(.{4}).(.{3}).(.{3})(.{12})$/\1-\2-4\3-8\4-\5/')
+# Or, in any shell with Python: WORKER_ID=$(python3 -c "import uuid; print(uuid.uuid4())")
 echo "Your HEXXU_WORKER_ID is: $WORKER_ID"
 
 # Add it to your shell profile (pick the right one for your shell)
@@ -130,11 +202,20 @@ schema and rotation policy.
 
 The CLI reads `~/.hexxu/telemetry/telemetry.jsonl` and prints a rollup. Recommended for daily-driver use; without it you have telemetry data but no view into it.
 
+Install a small wrapper that invokes the CLI via `node`. This works
+identically on POSIX and Git Bash — it avoids both the `env -S` shebang
+(not portable to Git Bash) and a file symlink (needs elevation on Windows),
+and it still tracks the live `.ts` in your clone, so `git pull` updates the
+CLI behavior. If you cloned hexxu somewhere other than `~/Development/hexxu`,
+edit the path in the wrapper.
+
 ```bash
 mkdir -p ~/.hexxu/bin
-ln -sfn ~/Development/hexxu/cli/telemetry-summary.ts \
-  ~/.hexxu/bin/hexxu-telemetry-summary
-chmod +x ~/Development/hexxu/cli/telemetry-summary.ts   # if not already
+cat > ~/.hexxu/bin/hexxu-telemetry-summary <<'EOF'
+#!/usr/bin/env bash
+exec node --experimental-strip-types "$HOME/Development/hexxu/cli/telemetry-summary.ts" "$@"
+EOF
+chmod +x ~/.hexxu/bin/hexxu-telemetry-summary
 
 # Add ~/.hexxu/bin to PATH (one-time)
 echo 'export PATH="$HOME/.hexxu/bin:$PATH"' >> ~/.bashrc
@@ -176,9 +257,11 @@ cat ~/.hexxu/skills-sync-state.json
 hexxu-telemetry-summary --since 1h
 # Expect: "Sessions in period: 1" + details
 
-# 4. The telemetry file should be mode 0600
+# 4. The telemetry file should be mode 0600 (POSIX / WSL only)
 ls -la ~/.hexxu/telemetry/telemetry.jsonl
-# Expect: -rw------- (only you can read)
+# Expect on POSIX/WSL: -rw------- (only you can read)
+# On Git Bash: the mode bits are not meaningful on NTFS; privacy rides on
+# your %USERPROFILE% ACL instead (see the Windows section). Skip this check.
 ```
 
 If any of these don't show what's expected, see the troubleshooting
@@ -205,7 +288,24 @@ The first git clone couldn't reach GitHub. Check:
 You had real files there before installing the sync extension. The
 extension refuses to destroy non-symlink content. Move your existing files
 elsewhere (or delete the dir), then run `/sync-skills` in pi (or wait for
-the next session) to re-create the symlink.
+the next session) to re-create the mount. (On Windows the mount is a
+directory **junction**, which `lstat` reports as a symlink — same handling.)
+
+### (Git Bash) `hexxu-telemetry-summary: command not found` or wrong worker ID
+
+Both come from the env-var / PATH living only in Git Bash's `~/.bashrc`.
+Confirm you launched pi **from the Git Bash prompt** (not PowerShell, cmd,
+or a desktop shortcut), then `source ~/.bashrc` or restart the Git Bash
+terminal. See the "One env-var caveat" note in the Windows section.
+
+### (WSL) Sync junction/symlink fails or telemetry file isn't mode 0600
+
+You almost certainly cloned into `/mnt/c/...` (a Windows drive) instead of
+your WSL home. On `/mnt/c` real symlinks need Admin/Developer Mode and Unix
+file modes are ignored, so the central-skills mount and the `0600`
+telemetry permission both break. Move everything under `~` (e.g.
+`~/Development/hexxu`) inside the Ubuntu shell and re-run the affected
+steps. See Option 2 in the Windows section.
 
 ### Telemetry file is empty after a session
 
